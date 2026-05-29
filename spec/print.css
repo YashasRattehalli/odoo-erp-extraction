@@ -1,0 +1,192 @@
+/* ===========================================================================
+   The Enterprise ERP Extraction — Technical Specification
+   Premium print stylesheet (CSS Paged Media, rendered by WeasyPrint).
+   Typography: Playfair Display (serif display) · Inter (sans body) · JetBrains
+   Mono (code). Fonts are bundled as local TTFs and embedded into the PDF.
+   =========================================================================== */
+
+@font-face { font-family: 'Display'; src: url('fonts/PlayfairDisplay.ttf') format('truetype'); font-weight: 400 900; }
+@font-face { font-family: 'Body';    src: url('fonts/Inter.ttf')          format('truetype'); font-weight: 100 900; }
+@font-face { font-family: 'Mono';    src: url('fonts/JetBrainsMono.ttf')  format('truetype'); font-weight: 100 800; }
+
+:root {
+  --ink:    #1b2733;
+  --accent: #0f4c5c;   /* deep teal */
+  --accent2:#1d7286;   /* lighter teal */
+  --gold:   #a9762a;   /* restrained amber accent */
+  --muted:  #5b6b78;
+  --rule:   #e3e9ee;
+  --tint:   #f1f6f7;
+  --tint2:  #eaf2f3;
+  --code-bg:#f7f9fb;
+  --warn:   #9a4a12;
+  --warn-bg:#fdf4ec;
+}
+
+/* ---- Page model -------------------------------------------------------- */
+@page {
+  size: A4;
+  margin: 22mm 20mm 18mm 20mm;
+  @top-center {
+    content: string(doctitle);
+    font-family: 'Body'; font-size: 7.5pt; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
+    padding-bottom: 2mm;
+  }
+  @bottom-left {
+    content: 'Yashas Rattehalli · Senior AI Automation Engineer';
+    font-family: 'Body'; font-size: 7.5pt; color: var(--muted);
+  }
+  @bottom-center {
+    content: 'Confidential';
+    font-family: 'Body'; font-size: 7.5pt; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  @bottom-right {
+    content: counter(page) ' / ' counter(pages);
+    font-family: 'Mono'; font-size: 7.5pt; color: var(--muted);
+  }
+}
+/* Borderless cover with no header/footer. */
+@page cover { margin: 0; @top-center{content:none;} @bottom-left{content:none;} @bottom-center{content:none;} @bottom-right{content:none;} }
+@page nochrome { @top-center{content:none;} }
+
+/* ---- Base typography --------------------------------------------------- */
+* { box-sizing: border-box; }
+html { font-family: 'Body', 'Helvetica Neue', sans-serif; color: var(--ink); }
+body { margin: 0; font-size: 10.4pt; line-height: 1.56; }
+p { margin: 0 0 2.6mm; }
+a { color: var(--accent); text-decoration: none; }
+strong { font-weight: 600; }
+em { font-style: italic; }
+small { font-size: 8.5pt; color: var(--muted); }
+
+/* Section numbering via counters. */
+body { counter-reset: h2 0; }
+h2 { counter-increment: h2; counter-reset: h3 0; }
+h3 { counter-increment: h3; }
+
+h1, h2, h3, h4 { font-family: 'Display'; font-weight: 700; color: var(--accent); }
+
+section.section { break-before: page; }
+section.section:first-of-type { break-before: auto; }
+
+h2 {
+  font-size: 19pt; line-height: 1.15; margin: 0 0 5mm;
+  padding-bottom: 2.5mm; border-bottom: 2px solid var(--accent);
+  string-set: doctitle 'The Enterprise ERP Extraction — Technical Specification';
+  break-after: avoid;
+}
+h2::before { content: counter(h2) '.\00a0\00a0'; color: var(--gold); }
+/* The TOC heading and appendices must not consume / show the section number. */
+.toc h2, .appendix h2 { counter-increment: none; }
+.toc h2::before, .appendix h2::before { content: none; }
+h3 {
+  font-family: 'Body'; font-weight: 600; font-size: 12.5pt; color: var(--ink);
+  margin: 6mm 0 2mm; break-after: avoid;
+}
+h3::before { content: counter(h2) '.' counter(h3) '\00a0\00a0'; color: var(--accent2); font-weight: 600; }
+h4 { font-family:'Body'; font-weight:600; font-size: 10.8pt; color: var(--accent); margin: 4mm 0 1.5mm; break-after: avoid; }
+
+ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+li { margin: 0 0 1.4mm; }
+ul.tight li, ol.tight li { margin: 0 0 .6mm; }
+
+/* ---- Cover page -------------------------------------------------------- */
+.cover {
+  page: cover; position: relative; height: 297mm; width: 100%;
+  color: #fff; padding: 40mm 26mm 24mm;
+  background: linear-gradient(150deg, #0c3a47 0%, var(--accent) 45%, #11586b 100%);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.cover .brand { font-family:'Body'; font-weight:600; letter-spacing:.34em; text-transform:uppercase;
+  font-size: 9pt; color: #bfe0e6; }
+.cover .rule-top { width: 26mm; height: 3px; background: var(--gold); margin: 6mm 0 14mm; }
+.cover .kicker { font-family:'Body'; font-weight:500; letter-spacing:.2em; text-transform:uppercase;
+  font-size: 9.5pt; color:#cfe6ea; margin-bottom: 5mm; }
+.cover h1 { font-family:'Display'; font-weight:700; color:#fff; font-size: 41pt; line-height:1.04; margin:0; }
+.cover .subtitle { font-family:'Body'; font-weight:300; font-size: 14pt; color:#dcecef0; margin-top: 7mm; max-width: 130mm; line-height:1.4; }
+.cover .meta { position:absolute; left:26mm; right:26mm; bottom: 24mm;
+  display:flex; justify-content:space-between; align-items:flex-end;
+  border-top: 1px solid rgba(255,255,255,.28); padding-top: 6mm; }
+.cover .meta .who { font-family:'Body'; }
+.cover .meta .who .name { font-size: 12pt; font-weight:600; }
+.cover .meta .who .role { font-size: 9.5pt; color:#cfe6ea; }
+.cover .meta .right { text-align:right; font-family:'Mono'; font-size: 8.5pt; color:#bcd9de; line-height:1.7; }
+.cover .tag { display:inline-block; margin-top: 10mm; font-family:'Body'; font-size:8pt; letter-spacing:.16em;
+  text-transform:uppercase; color:#0c3a47; background:#bfe0e6; padding: 2mm 4mm; border-radius: 2px; font-weight:600; }
+
+/* ---- Table of contents ------------------------------------------------- */
+.toc { page: nochrome; }
+.toc h2 { string-set: none; }
+.toc ol { list-style: none; padding: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; display:flex; align-items:baseline;
+  border-bottom: 1px dotted var(--rule); padding: 2.1mm 0; margin:0; }
+.toc li .n { font-family:'Mono'; color: var(--gold); width: 9mm; font-size: 9.5pt; }
+.toc li .t { font-weight: 500; }
+.toc li a { color: var(--ink); flex: 1; }
+.toc li a::after { content: target-counter(attr(href), page); float: right; font-family:'Mono';
+  color: var(--muted); font-size: 9.5pt; }
+.toc .sub { padding-left: 9mm; }
+.toc .sub .t { font-weight: 400; color: var(--muted); }
+
+/* ---- Lead / summary ---------------------------------------------------- */
+.lead { font-size: 11.6pt; line-height: 1.5; color: #2a3b46; font-weight: 300; }
+.eyebrow { font-family:'Body'; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  font-size: 8pt; color: var(--accent2); margin-bottom: 1.5mm; }
+
+/* ---- Tables ------------------------------------------------------------ */
+table { width: 100%; border-collapse: collapse; font-size: 9.1pt; margin: 4mm 0 5mm; break-inside: auto; }
+thead { display: table-header-group; }
+th { background: var(--accent); color:#fff; text-align:left; padding: 4px 8px; font-weight:600;
+  font-size: 8.6pt; letter-spacing:.02em; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+td { padding: 4px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tbody tr:nth-child(even) td { background: var(--tint); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+table code { font-size: 8.4pt; }
+.small-table { font-size: 8.5pt; }
+tr { break-inside: avoid; }
+
+/* ---- Callouts ---------------------------------------------------------- */
+.callout { border-left: 3px solid var(--accent); background: var(--tint);
+  padding: 3mm 5mm; margin: 4mm 0; break-inside: avoid; border-radius: 0 3px 3px 0; }
+.callout .label { font-family:'Body'; font-weight:700; font-size: 7.6pt; letter-spacing:.12em;
+  text-transform:uppercase; color: var(--accent); display:block; margin-bottom: 1mm; }
+.callout p:last-child { margin-bottom: 0; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+.callout.warn .label { color: var(--warn); }
+.callout.key { border-left-color: var(--gold); background: #fbf6ee; }
+.callout.key .label { color: var(--gold); }
+
+/* ---- Code -------------------------------------------------------------- */
+.highlight { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 5px;
+  padding: 3mm 4mm; margin: 3.5mm 0 4.5mm; break-inside: avoid;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.highlight pre { margin: 0; font-family: 'Mono','Menlo',monospace; font-size: 8.2pt; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; }
+/* Long listings (e.g. the full JSON extract) may span pages instead of orphaning a heading. */
+.highlight.long { break-inside: auto; }
+code, .mono { font-family: 'Mono','Menlo',monospace; font-size: 9pt; }
+p code, li code, td code { background: var(--tint2); padding: 0 3px; border-radius: 3px; font-size: 8.6pt; color: #143b46; }
+.caption { font-size: 8pt; color: var(--muted); margin: -2mm 0 4mm; font-style: italic; }
+
+/* ---- Flow diagram ------------------------------------------------------ */
+.flow { display: flex; align-items: stretch; gap: 0; margin: 5mm 0 2mm; }
+.flow .step { flex: 1; background: #fff; border: 1.4px solid var(--accent2); border-radius: 5px;
+  padding: 3mm 2mm; text-align: center; }
+.flow .step .t { font-family:'Body'; font-weight: 600; font-size: 8.4pt; color: var(--accent); display:block; }
+.flow .step .d { font-size: 7.2pt; color: var(--muted); display:block; margin-top: 1mm; line-height:1.25; }
+.flow .arrow { display:flex; align-items:center; justify-content:center; width: 6mm;
+  color: var(--gold); font-family:'Mono'; font-weight:700; font-size: 11pt; }
+
+/* ---- Metadata grid ----------------------------------------------------- */
+.kv { display:grid; grid-template-columns: 1fr 1fr; gap: 0; border:1px solid var(--rule); border-radius:5px; overflow:hidden; margin: 4mm 0; }
+.kv div { padding: 2.4mm 4mm; border-bottom:1px solid var(--rule); font-size: 9pt; }
+.kv div:nth-child(odd) { background: var(--tint); font-weight:600; color: var(--accent); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+/* ---- Misc -------------------------------------------------------------- */
+hr { border: none; border-top: 1px solid var(--rule); margin: 6mm 0; }
+.badge { display:inline-block; font-family:'Body'; font-size:7.4pt; font-weight:600; letter-spacing:.06em;
+  text-transform:uppercase; padding: .6mm 2mm; border-radius: 3px; background: var(--tint2); color: var(--accent); }
+.badge.ok { background:#e7f4ec; color:#1f7a44; }
+.footnote { font-size: 8pt; color: var(--muted); }
+figure { margin: 4mm 0; }

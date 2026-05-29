@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>The Enterprise ERP Extraction — Technical Specification</title></head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<div class="cover">
+  <div class="brand">Yashas&nbsp;Rattehalli</div>
+  <div class="rule-top"></div>
+  <div class="kicker">Technical Specification</div>
+  <h1>The Enterprise<br>ERP Extraction</h1>
+  <div class="subtitle">Resilient browser automation of a dynamic Odoo ERP — network-intercepted
+  data extraction with strict, in-memory PHI sanitization and HIPAA-aligned controls.</div>
+  <span class="tag">Confidential — Prepared for Evaluation</span>
+  <div class="meta">
+    <div class="who">
+      <div class="name">Yashas Rattehalli</div>
+      <div class="role">Senior AI Automation Engineer</div>
+    </div>
+    <div class="right">
+      Version {{ version }}<br>
+      {{ date }}<br>
+      Verified: Odoo SaaS&nbsp;19.3
+    </div>
+  </div>
+</div>
+
+<!-- ============================ TOC ============================ -->
+<section class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><span class="n">1</span><a class="t" href="#sec-exec">Executive Summary</a></li>
+    <li><span class="n">2</span><a class="t" href="#sec-scope">Challenge &amp; Scope</a></li>
+    <li><span class="n">3</span><a class="t" href="#sec-arch">Solution Architecture</a></li>
+    <li><span class="n">4</span><a class="t" href="#sec-env">Target Environment &amp; Data Setup</a></li>
+    <li><span class="n">5</span><a class="t" href="#sec-flow">Automation Workflow</a></li>
+    <li><span class="n">6</span><a class="t" href="#sec-locators">Resilient Locator Strategy</a></li>
+    <li><span class="n">7</span><a class="t" href="#sec-net">Network Interception &amp; No-Sleep Synchronization</a></li>
+    <li><span class="n">8</span><a class="t" href="#sec-privacy">Privacy Engineering: In-Memory PHI Sanitization</a></li>
+    <li><span class="n">9</span><a class="t" href="#sec-hipaa">HIPAA Compliance Mapping</a></li>
+    <li><span class="n">10</span><a class="t" href="#sec-schema">Data Model &amp; Output Schema</a></li>
+    <li><span class="n">11</span><a class="t" href="#sec-integrity">Integrity &amp; Verification</a></li>
+    <li><span class="n">12</span><a class="t" href="#sec-ops">Operations &amp; Runbook</a></li>
+    <li><span class="n">13</span><a class="t" href="#sec-limits">Limitations, Assumptions &amp; Future Work</a></li>
+    <li><span class="n">A</span><a class="t" href="#sec-appendix-a">Appendix A — Verified Run Evidence</a></li>
+    <li><span class="n">B</span><a class="t" href="#sec-appendix-b">Appendix B — References</a></li>
+  </ol>
+</section>
+
+<!-- ====================== 1 · EXECUTIVE SUMMARY ====================== -->
+<section class="section" id="sec-exec">
+  <h2>Executive Summary</h2>
+  <p class="lead">This document specifies a production-grade automation that authenticates to a live
+  Odoo ERP, navigates its highly reactive Invoicing interface, isolates <em>posted</em> customer
+  invoices, drills into a named customer's invoice, and extracts the billing lines into a clean,
+  verifiable JSON document — while treating all billing data as Protected Health Information (PHI).</p>
+
+  <p>The implementation deliberately satisfies three engineering disciplines that distinguish robust
+  enterprise automation from a brittle script: <strong>(i) signal-based synchronization</strong> with
+  no hardcoded waits, <strong>(ii) resilient, semantic locators</strong> that survive the framework's
+  ephemeral DOM, and <strong>(iii) authoritative data capture via network interception</strong> rather
+  than fragile screen-scraping. Layered over these is a <strong>privacy-by-design</strong> posture: PHI
+  exists only in transient memory, never reaches a log sink, and the sole file artifact is the final
+  extract.</p>
+
+  <div class="kv">
+    <div>Target instance</div><div>Odoo SaaS 19.3 (odoo.com trial)</div>
+    <div>Workflow</div><div>Auth → Filter (Posted) → Locate → Drill → Extract → Sanitize</div>
+    <div>Data source</div><div>JSON-RPC <code>account.move/web_read</code> (server-computed)</div>
+    <div>Target customer</div><div>Deco Addict (configurable; alias-aware)</div>
+    <div>Result</div><div>3 lines · header/line totals reconciled · integrity fingerprint</div>
+    <div>Privacy</div><div>0 PHI tokens in logs · optional Safe Harbor de-identification</div>
+  </div>
+
+  <div class="callout key"><span class="label">Outcome</span>
+  A single command produces a standardized JSON extract whose monetary figures originate from the ERP's
+  own computations, are independently reconciled, and are accompanied by a tamper-evident checksum — with
+  a verifiable guarantee that no customer or product identifier ever appears in application logs.</div>
+</section>
+
+<!-- ====================== 2 · CHALLENGE & SCOPE ====================== -->
+<section class="section" id="sec-scope">
+  <h2>Challenge &amp; Scope</h2>
+  <p>The objective is to demonstrate Playwright expertise in navigating complex, asynchronous enterprise
+  applications (mimicking Electronic Health Record systems), authoring resilient locators, and
+  implementing strict in-memory data sanitization. The mandated workflow is:</p>
+  <ol>
+    <li><strong>Authentication &amp; Navigation</strong> — launch a persistent browser and reach the Invoicing module.</li>
+    <li><strong>Bypass dynamic UI</strong> — clear default filters and apply the <em>Posted</em> status filter.</li>
+    <li><strong>Deep drill-down</strong> — find the invoice for customer <em>Deco Addict</em> and open the detail view.</li>
+    <li><strong>Data extraction</strong> — read the Invoice Lines (product, quantity, unit price, tax amount) into a standardized JSON array.</li>
+  </ol>
+
+  <h3>Hard constraints</h3>
+  <table>
+    <thead><tr><th style="width:32%">Constraint</th><th>Specification &amp; how it is honored</th></tr></thead>
+    <tbody>
+      <tr><td>No hardcoded sleeps</td><td><code>page.wait_for_timeout()</code> / <code>time.sleep()</code> are disqualifying. The automation uses only network-response triggers and auto-retrying assertions — see §7.</td></tr>
+      <tr><td>Resilient locators</td><td>Odoo's OWL framework emits ephemeral ids; we bind to semantic <code>name</code> attributes, ARIA roles, and stable framework classes — see §6.</td></tr>
+      <tr><td>Privacy guardrails</td><td>Billing data is treated as PHI. Logs never print the customer name or product details; PHI is scrubbed in memory and only the final JSON is written to disk — see §8.</td></tr>
+    </tbody>
+  </table>
+  <p>The deliverables are this specification and the working Python Playwright script that executes the
+  workflow and demonstrates the in-memory sanitization.</p>
+</section>
+
+<!-- ====================== 3 · ARCHITECTURE ====================== -->
+<section class="section" id="sec-arch">
+  <h2>Solution Architecture</h2>
+  <p>The system is a small, cohesive Python package with clearly separated responsibilities. Control flows
+  left-to-right; the authoritative data path is the intercepted JSON-RPC response.</p>
+
+  <div class="flow">
+    <div class="step"><span class="t">Authenticate</span><span class="d">persistent context, login</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="t">Navigate&nbsp;&amp;&nbsp;Filter</span><span class="d">deep-link, clear, Posted</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="t">Locate&nbsp;&amp;&nbsp;Open</span><span class="d">match row, click</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="t">Intercept&nbsp;RPC</span><span class="d">web_read payload</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="t">Derive&nbsp;&amp;&nbsp;Reconcile</span><span class="d">tax, totals, checks</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="t">Sanitize&nbsp;&amp;&nbsp;Emit</span><span class="d">scrub logs, JSON</span></div>
+  </div>
+  <p class="caption">Figure 1 — End-to-end data flow. The PHI sanitization layer wraps every stage that emits a log record.</p>
+
+  <h3>Components</h3>
+  <table>
+    <thead><tr><th style="width:30%">Module</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td><code>cli.py</code></td><td>Argument parsing, configuration assembly, logging bootstrap, exit codes.</td></tr>
+      <tr><td><code>config.py</code></td><td>Validated settings (pydantic-settings); secrets wrapped in <code>SecretStr</code>.</td></tr>
+      <tr><td><code>odoo_client.py</code></td><td>Playwright session; login, navigation, facet clearing, Posted filter, drill-down, DOM fallback.</td></tr>
+      <tr><td><code>interception.py</code></td><td>JSON-RPC predicates and payload parsing; per-line tax derivation; relational-value coercion.</td></tr>
+      <tr><td><code>sanitization.py</code></td><td>In-memory PHI redaction engine and the <code>logging.Filter</code>.</td></tr>
+      <tr><td><code>logging_setup.py</code></td><td>Handler-level sanitized logging configuration.</td></tr>
+      <tr><td><code>deidentify.py</code></td><td>HIPAA Safe Harbor de-identification pass.</td></tr>
+      <tr><td><code>integrity.py</code></td><td>SHA-256 line fingerprint; header/line reconciliation.</td></tr>
+      <tr><td><code>models.py</code></td><td>Typed output schema (Pydantic); computed <code>tax_amount</code>.</td></tr>
+      <tr><td><code>extractor.py</code></td><td>Orchestrates the workflow into a typed <code>ExtractionResult</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====================== 4 · ENVIRONMENT ====================== -->
+<section class="section" id="sec-env">
+  <h2>Target Environment &amp; Data Setup</h2>
+  <p>The tool is <strong>instance-agnostic</strong>: it targets any Odoo instance via configuration and
+  auto-detects the active URL scheme (modern <code>/odoo/&hellip;</code> vs legacy <code>/web#&hellip;</code>).
+  It was verified against a freshly provisioned odoo.com trial running Odoo SaaS&nbsp;19.3 with the Sales
+  and Invoicing applications.</p>
+
+  <h3>Demo data (Part 1)</h3>
+  <p>A fresh trial renders <em>client-side sample rows</em> in an empty list view; these are placeholders,
+  not records. To exercise the workflow faithfully, a small, idempotent helper
+  (<code>scripts/seed_demo_data.py</code>) provisions a controlled dataset through Odoo's admin API:</p>
+  <ul class="tight">
+    <li>products with sales taxes (a standard 19% rate and a reduced 7% rate);</li>
+    <li>customers — including <strong>Deco&nbsp;Addict</strong> — plus Azure Interior and Gemini Furniture;</li>
+    <li>a mix of <strong>posted and draft</strong> invoices with multi-line, multi-tax content.</li>
+  </ul>
+  <div class="callout"><span class="label">Why this matters</span>
+  Deco Addict has both a posted and a draft invoice, so the <em>Posted</em> filter is genuinely required to
+  select the correct record; and the posted invoice mixes 19% and 7% lines, so the per-line tax derivation
+  is non-trivial and demonstrable.</div>
+
+  <div class="callout key"><span class="label">Version note — "Deco Addict"</span>
+  Odoo's stock demo customer <code>res_partner_2</code> was named <em>Deco Addict</em> through v15 and
+  relabelled <em>Acme Corporation</em> in v16+. The tool therefore treats the customer name as
+  configuration and tries configured aliases in order — so the literal challenge target works regardless of
+  the instance's demo-data vintage.</div>
+</section>
+
+<!-- ====================== 5 · WORKFLOW ====================== -->
+<section class="section" id="sec-flow">
+  <h2>Automation Workflow</h2>
+  <p>The orchestration (<code>extractor.run_extraction</code>) executes the mandated sequence. Each step is
+  bounded by an explicit readiness signal.</p>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:28%">Step</th><th>Behavior &amp; readiness signal</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Authenticate</td><td>Persistent context; submit credentials at <code>/web/login</code>; assert the application shell is visible. Skips the form when an existing session is detected.</td></tr>
+      <tr><td>2</td><td>Navigate</td><td>Deep-link to the <code>account.action_move_out_invoice_type</code> action; fall back across URL schemes; assert the list renderer is visible.</td></tr>
+      <tr><td>3</td><td>Clear filters</td><td>Remove any pre-applied facets, waiting on an auto-retrying <em>facet-count</em> assertion after each removal.</td></tr>
+      <tr><td>4</td><td>Apply <em>Posted</em></td><td>Open the search dropdown; click the <em>Posted</em> filter; <strong>await the resulting <code>search_read</code></strong>; assert the <em>Posted</em> facet is present.</td></tr>
+      <tr><td>5</td><td>Locate customer</td><td>Match the row whose <code>invoice_partner_display_name</code> cell contains the target (or an alias).</td></tr>
+      <tr><td>6</td><td>Open invoice</td><td>Click the row <strong>inside</strong> <code>expect_response(account.move/web_read)</code> so the authoritative payload is captured; assert the form view; confirm the status bar reads <code>posted</code>.</td></tr>
+      <tr><td>7</td><td>Extract lines</td><td>Parse the captured payload's nested line records; derive tax; reconcile; serialize.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====================== 6 · LOCATORS ====================== -->
+<section class="section" id="sec-locators">
+  <h2>Resilient Locator Strategy</h2>
+  <p>Odoo's OWL framework regenerates DOM nodes and ids on each reactive update. Locators are therefore
+  ranked by stability and never bound to generated artifacts. Element handles are never cached — every read
+  re-queries the live DOM.</p>
+  <ol class="tight">
+    <li><strong>Semantic field attributes</strong> — <code>[name='&lt;field&gt;']</code>, rendered from OWL <code>t-att-name</code>, equal to the model field and stable across versions and languages.</li>
+    <li><strong>ARIA roles / accessible names</strong> — e.g. <code>get_by_role('menuitemcheckbox', name='Posted')</code>.</li>
+    <li><strong>Stable framework classes</strong> — <code>.o_data_row</code>, <code>.o_searchview_facet</code>, <code>.o_notebook</code>, <code>.o_statusbar_status</code>.</li>
+    <li><strong>Scoped visible text</strong>; then <strong>structural relative XPath</strong> as a last resort.</li>
+  </ol>
+  <table class="small-table">
+    <thead><tr><th style="width:34%">Target</th><th>Resilient locator</th></tr></thead>
+    <tbody>
+      <tr><td>Login fields</td><td><code>input[name='login']</code>, <code>input[name='password']</code>, <code>button[type='submit']</code></td></tr>
+      <tr><td>Customer Invoices</td><td>deep-link <code>action-account.action_move_out_invoice_type</code></td></tr>
+      <tr><td>Clear facet</td><td><code>.o_searchview_facet .o_facet_remove</code></td></tr>
+      <tr><td>Open search menu</td><td><code>.o_searchview_dropdown_toggler</code> → <code>.o-dropdown--menu</code></td></tr>
+      <tr><td>Apply Posted</td><td><code>get_by_role('menuitemcheckbox', name='Posted')</code></td></tr>
+      <tr><td>Customer row</td><td><code>tr.o_data_row</code> filtered by <code>td[name='invoice_partner_display_name']</code></td></tr>
+      <tr><td>Posted state (untranslated)</td><td><code>.o_statusbar_status .o_arrow_button_current</code> → <code>data-value='posted'</code></td></tr>
+      <tr><td>Invoice Lines tab / table</td><td><code>.o_notebook</code> → <code>.tab-pane.active .o_list_renderer</code></td></tr>
+      <tr><td>Line fields</td><td><code>[name='product_id'|'quantity'|'price_unit'|'tax_ids'|'price_subtotal'|'price_total']</code></td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><span class="label">i18n robustness</span>
+  Internal values such as <code>data-value='posted'</code> and field <code>name</code> attributes are not
+  translated, whereas visible labels are. Where correctness must survive a non-English instance, the tool
+  prefers the untranslated attribute over the label.</div>
+</section>
+
+<!-- ====================== 7 · NETWORK INTERCEPTION ====================== -->
+<section class="section" id="sec-net">
+  <h2>Network Interception &amp; No-Sleep Synchronization</h2>
+  <h3>Authoritative data over the wire</h3>
+  <p>Monetary and tax fields are computed server-side and rendered asynchronously (and rounded for display).
+  Rather than scrape rendered text, the tool reads Odoo's own JSON-RPC response. All ORM reads ride the single
+  endpoint <code>/web/dataset/call_kw</code> — there is no bare <code>/web/dataset/web_read</code> route, as
+  <code>web_read</code> is a model method dispatched through <code>call_kw</code>. The predicate therefore
+  matches that path and inspects the request body's <code>model</code>/<code>method</code>:</p>
+  {{ code_predicate }}
+  <p>The opened invoice's payload nests the full line records under <code>invoice_line_ids</code>
+  (<code>product_id</code>, <code>quantity</code>, <code>price_unit</code>, <code>tax_ids</code>,
+  <code>price_subtotal</code>, <code>price_total</code>) and the header totals under <code>tax_totals</code>.
+  Per-line tax is derived from server-computed values:</p>
+  <div class="callout key"><span class="label">Tax derivation</span>
+  <code>tax_amount = price_total − price_subtotal</code>, summed and cross-checked against the header
+  <code>tax_totals</code>. The DOM does not even render <code>price_total</code> as a default column — a
+  concrete reason the network payload, not the screen, is the source of truth.</div>
+
+  <h3>Eliminating sleeps</h3>
+  <p>The automation contains <strong>zero</strong> <code>time.sleep</code> / <code>wait_for_timeout</code>
+  calls. Synchronization is entirely signal-based:</p>
+  <table>
+    <thead><tr><th style="width:42%">Situation</th><th>Replacement</th></tr></thead>
+    <tbody>
+      <tr><td>Server round-trip (filter, open, recompute)</td><td><code>with page.expect_response(predicate):</code> around the triggering click — the response <em>is</em> the readiness signal.</td></tr>
+      <tr><td>Re-rendered content / value</td><td>Web-first auto-retrying assertions: <code>expect(loc).to_be_visible()</code>, <code>to_have_count(n)</code>.</td></tr>
+      <tr><td>Element interaction</td><td>Playwright's built-in actionability checks (visible, stable, enabled) before every click/fill.</td></tr>
+      <tr><td>Session persistence</td><td><code>launch_persistent_context</code> retains the session cookie across runs.</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote">Network-idle waiting is deliberately avoided: an RPC/long-polling SPA may never idle, or
+  may idle before the meaningful response arrives. Awaiting the <em>specific</em> response is both correct and faster.</p>
+</section>
+
+<!-- ====================== 8 · PRIVACY ENGINEERING ====================== -->
+<section class="section" id="sec-privacy">
+  <h2>Privacy Engineering: In-Memory PHI Sanitization</h2>
+  <p>Billing data is treated as PHI. The guarantee — <em>no customer or product identifier ever reaches a log
+  sink</em> — is delivered by a defense-in-depth, deny-list-first design. The deterministic layers run on every
+  record; the ML layer is an optional backstop.</p>
+  <table>
+    <thead><tr><th style="width:20%">Layer</th><th>Mechanism</th><th style="width:24%">Property</th></tr></thead>
+    <tbody>
+      <tr><td>0 · Discipline</td><td>Call sites log only safe scalars (counts, statuses, opaque ids) — never raw objects or PHI-bearing strings.</td><td>Prevention</td></tr>
+      <tr><td>1 · Deny-list</td><td>Exact PHI tokens captured at runtime (customer, products, invoice #) are removed by a compiled, case-insensitive matcher.</td><td><strong>Hard guarantee</strong> · O(1)/token</td></tr>
+      <tr><td>2 · Regex</td><td>Fast patterns for email, SSN, card, IP, URL, and Odoo invoice numbers.</td><td>Deterministic</td></tr>
+      <tr><td>3 · Presidio NER</td><td>Optional, lazy <code>en_core_web_sm</code> sweep (PERSON/LOCATION) over residual free text; degrades open on failure.</td><td>Context-aware</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The load-bearing detail</h3>
+  <p>Python's logging renders the final string lazily as <code>record.msg % record.args</code>. Scrubbing only
+  <code>record.msg</code> would leave PHI in <code>record.args</code>. The filter therefore renders once, scrubs,
+  and clears <code>args</code> — and is attached to <strong>handlers</strong> so every sink is guarded, including
+  records from third-party libraries:</p>
+  {{ code_filter }}
+  <div class="callout"><span class="label">Why deny-list, not ML, is the guarantee</span>
+  An exact-token deny-list is the only layer that can <em>promise</em> a specific name never appears; NER models
+  are probabilistic. Cloud PII APIs are rejected outright — they would transmit log content off-host, violating
+  the in-memory requirement. The tool also allow-lists operational, non-PHI values (e.g. the instance endpoint)
+  so logs stay debuggable.</div>
+  <p>Exception and stack text bypass the <code>msg % args</code> path and are scrubbed explicitly; if sanitization
+  itself ever failed, the filter fails <em>closed</em> (suppresses content) rather than risk a leak. The only file
+  artifact the program writes is the final JSON extract.</p>
+</section>
+
+<!-- ====================== 9 · HIPAA ====================== -->
+<section class="section" id="sec-hipaa">
+  <h2>HIPAA Compliance Mapping</h2>
+  <div class="callout"><span class="label">Scope</span>
+  HIPAA binds <em>covered entities</em> and <em>business associates</em>, not standalone software (45 CFR 160.103).
+  This tool is a component; it becomes regulated when operated by/for such an entity handling PHI, which typically
+  requires a Business Associate Agreement (164.502(e), 164.504(e)). Billing data <em>is</em> PHI because "payment for
+  the provision of health care" is enumerated individually identifiable health information. Administrative (164.308)
+  and Physical (164.310) safeguards are the operating organization's responsibility.</div>
+
+  <h3>Technical safeguards realized in this tool</h3>
+  <table class="small-table">
+    <thead><tr><th>Control implemented here</th><th style="width:26%">CFR citation</th><th style="width:16%">Class</th></tr></thead>
+    <tbody>
+      <tr><td>PHI handled only as transient in-memory objects; no raw PHI persisted</td><td>164.502(b); 164.312(a)(1)</td><td>Min. necessary / Access</td></tr>
+      <tr><td>PHI never logged (deny-list + regex scrub at the handler boundary)</td><td>164.502(b)</td><td>Min. necessary</td></tr>
+      <tr><td>Only the required billing fields are extracted (data minimization)</td><td>164.502(b); 164.514(d)</td><td>Min. necessary</td></tr>
+      <tr><td>Audit-friendly logging without PHI (counts, status, correlation)</td><td>164.312(b)</td><td>Audit controls</td></tr>
+      <tr><td>Unique service identity; least-privilege credentials from env/secret store</td><td>164.312(a)(2)(i)</td><td><strong>Required</strong></td></tr>
+      <tr><td>Authenticated session against the ERP</td><td>164.312(d)</td><td>Authentication</td></tr>
+      <tr><td>TLS to the instance (HTTPS) for data in transit</td><td>164.312(e)(1),(e)(2)(ii)</td><td>Transmission / Addr.</td></tr>
+      <tr><td>SHA-256 line fingerprint + header/line reconciliation</td><td>164.312(c)(1),(c)(2)</td><td>Integrity / Addr.</td></tr>
+      <tr><td>Optional Safe Harbor de-identification of the output</td><td>164.514(b)(2)</td><td>De-identification</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote">"Addressable" does not mean optional (164.306(d)(3)): each must be implemented, or a documented,
+  risk-based equivalent adopted. NIST/FIPS-validated encryption additionally triggers the HITECH breach safe harbor.</p>
+
+  <h3>Safe Harbor de-identification (45 CFR 164.514(b)(2))</h3>
+  <p>With <code>--deidentify</code>, the extract is transformed so it no longer contains the 18 Safe Harbor
+  identifiers — after which it is, by regulation, no longer PHI. For billing data the relevant transforms are:
+  names → salted-HMAC surrogate (A); dates → year only (C); account/invoice numbers → surrogate (J/R); and free-text
+  descriptions are swept for residual identifiers.</p>
+  <table class="small-table">
+    <thead><tr><th>The 18 identifiers (164.514(b)(2)(i))</th><th>&nbsp;</th></tr></thead>
+    <tbody>
+      <tr><td>(A) Names</td><td>(J) Account numbers</td></tr>
+      <tr><td>(B) Geographic subdivisions &lt; state</td><td>(K) Certificate / license numbers</td></tr>
+      <tr><td>(C) Dates (except year); ages &gt; 89</td><td>(L) Vehicle identifiers / plates</td></tr>
+      <tr><td>(D) Telephone numbers</td><td>(M) Device identifiers / serials</td></tr>
+      <tr><td>(E) Fax numbers</td><td>(N) Web URLs</td></tr>
+      <tr><td>(F) Email addresses</td><td>(O) IP addresses</td></tr>
+      <tr><td>(G) Social Security numbers</td><td>(P) Biometric identifiers</td></tr>
+      <tr><td>(H) Medical record numbers</td><td>(Q) Full-face photographs</td></tr>
+      <tr><td>(I) Health-plan beneficiary numbers</td><td>(R) Any other unique identifying number/characteristic/code</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====================== 10 · SCHEMA ====================== -->
+<section class="section" id="sec-schema">
+  <h2>Data Model &amp; Output Schema</h2>
+  <p>The output is a typed, validated document (Pydantic). Per-line <code>tax_amount</code> is a computed field —
+  always <code>total − subtotal</code> — so it cannot drift from its definition.</p>
+  <table class="small-table">
+    <thead><tr><th style="width:30%">Field</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>metadata.*</code></td><td>Tool version, UTC timestamp, source, instance URL, URL scheme, de-identification flag, integrity SHA-256.</td></tr>
+      <tr><td><code>invoice.invoice_number</code></td><td>e.g. <code>INV/2026/00001</code> (null for drafts).</td></tr>
+      <tr><td><code>invoice.customer / state / currency</code></td><td>Partner display name; status; ISO currency.</td></tr>
+      <tr><td><code>invoice.amount_untaxed / amount_tax / amount_total</code></td><td>Authoritative header totals from <code>tax_totals</code>.</td></tr>
+      <tr><td><code>lines[].product / description</code></td><td>Product display name; line label.</td></tr>
+      <tr><td><code>lines[].quantity / unit_price</code></td><td>Billed quantity; pre-tax unit price.</td></tr>
+      <tr><td><code>lines[].taxes / subtotal / total / tax_amount</code></td><td>Tax tag(s); net; tax-inclusive; derived per-line tax.</td></tr>
+      <tr><td><code>checks.*</code></td><td>Line count, line sums, and booleans reconciling line sums to the header.</td></tr>
+    </tbody>
+  </table>
+  <h3>Representative output</h3>
+  {{ sample_json }}
+</section>
+
+<!-- ====================== 11 · INTEGRITY ====================== -->
+<section class="section" id="sec-integrity">
+  <h2>Integrity &amp; Verification</h2>
+  <p>Each extract carries integrity evidence mapping to HIPAA 164.312(c):</p>
+  <ul class="tight">
+    <li><strong>SHA-256 fingerprint</strong> over the canonical line set — any later alteration is detectable.</li>
+    <li><strong>Header/line reconciliation</strong> — the sum of per-line tax (and totals) is compared to the
+    server's header <code>tax_totals</code>. These are two independent server computations; their agreement is
+    strong evidence of a faithful extraction.</li>
+  </ul>
+  <p>On the verified run, both checks returned <span class="badge ok">true</span>:
+  <code>Σ line tax = 122.82 = amount_tax</code> and <code>Σ line total = 812.82 = amount_total</code>.</p>
+
+  <h3>Automated tests</h3>
+  <p>A 24-case offline suite covers the high-risk logic without a live instance:</p>
+  <table class="small-table">
+    <thead><tr><th style="width:34%">Area</th><th>What is asserted</th></tr></thead>
+    <tbody>
+      <tr><td>Sanitization</td><td>Deny-list removal, case-insensitivity, <code>args</code> clearing, exception scrubbing, conservative phone matching (dates/hashes spared), URL allow-listing, fail-closed behavior.</td></tr>
+      <tr><td>Interception</td><td>Relational coercion (dict/list encodings), section-row skipping, tax derivation, header totals from <code>tax_totals</code>, currency harvesting.</td></tr>
+      <tr><td>Models / integrity</td><td>Computed <code>tax_amount</code>, monetary rounding, reconciliation truth/false/none, deterministic fingerprint sensitivity.</td></tr>
+      <tr><td>De-identification</td><td>Identifier stripping, year-only dates, deterministic and non-destructive surrogates, salt sensitivity.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====================== 12 · OPERATIONS ====================== -->
+<section class="section" id="sec-ops">
+  <h2>Operations &amp; Runbook</h2>
+  <p>The tool is a standard console script. Configuration resolves CLI flags → environment (<code>ODOO_*</code>) /
+  <code>.env</code> → defaults; credentials are wrapped in <code>SecretStr</code> and never logged.</p>
+  {{ code_cli }}
+  <table class="small-table">
+    <thead><tr><th style="width:34%">Setting</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>ODOO_BASE_URL / --base-url</code></td><td>Instance root URL.</td></tr>
+      <tr><td><code>ODOO_USERNAME / --username</code>, <code>ODOO_PASSWORD</code></td><td>Service-account login (password via env preferred).</td></tr>
+      <tr><td><code>ODOO_TARGET_CUSTOMER / --customer</code></td><td>Primary customer; aliases tried on miss.</td></tr>
+      <tr><td><code>--headed / --slow-mo</code></td><td>Show the browser; cosmetic per-action delay for demos.</td></tr>
+      <tr><td><code>--deidentify</code></td><td>Emit a Safe Harbor de-identified extract.</td></tr>
+      <tr><td><code>--enable-presidio</code></td><td>Enable the NER backstop (deny-list + regex always run).</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Exit codes:</strong> <code>0</code> success · <code>1</code> unexpected · <code>2</code> extraction error ·
+  <code>3</code> customer not found — a stable contract for CI/orchestration.</p>
+</section>
+
+<!-- ====================== 13 · LIMITATIONS ====================== -->
+<section class="section" id="sec-limits">
+  <h2>Limitations, Assumptions &amp; Future Work</h2>
+  <ul>
+    <li><strong>Regulatory scope.</strong> Software alone is not HIPAA-compliant; compliance is an organizational
+    state requiring administrative and physical safeguards and, where applicable, a Business Associate Agreement.</li>
+    <li><strong>Trial volatility.</strong> odoo.com trials expire and may ship differing demo data; the seeding
+    helper makes the demo deterministic and the locators are version-tolerant.</li>
+    <li><strong>Conservative phone redaction.</strong> The phone pattern intentionally favors precision (requires a
+    <code>+</code> prefix or parenthesized area code) so it never clobbers dates, hashes, or timestamps; the exact
+    deny-list remains the guarantee for names.</li>
+    <li><strong>Presidio is optional.</strong> The deterministic layers are always on; the NER backstop is opt-in
+    and degrades open if the model is unavailable.</li>
+    <li><strong>Future work.</strong> Encryption-at-rest for any cached extract (FIPS-validated) to claim the HITECH
+    breach safe harbor; pagination/batch extraction across many invoices; a structured audit-log sink; and an
+    Expert Determination de-identification mode for richer datasets.</li>
+  </ul>
+</section>
+
+<!-- ====================== APPENDIX A ====================== -->
+<section class="section appendix" id="sec-appendix-a">
+  <h2>Appendix A — Verified Run Evidence</h2>
+  <p>Console output of a live run against the trial. Note that only step messages, counts, and the integrity
+  result appear — <strong>no customer or product names</strong> — while the instance URL and SHA-256 are preserved
+  for operability:</p>
+  {{ run_log }}
+  <p>The companion de-identified extract (<code>--deidentify</code>) renders the same invoice as
+  <code>customer: "CUST-…"</code>, <code>invoice_number: "INV-…"</code>, <code>invoice_date: "2026"</code>, with
+  free-text descriptions redacted — illustrating the Safe Harbor transform end-to-end.</p>
+</section>
+
+<!-- ====================== APPENDIX B ====================== -->
+<section class="section appendix" id="sec-appendix-b">
+  <h2>Appendix B — References</h2>
+  <h4>Regulatory</h4>
+  <ul class="tight">
+    <li>45 CFR 160.103 — Definitions (PHI, covered entity, business associate).</li>
+    <li>45 CFR 164.312 — Technical safeguards.</li>
+    <li>45 CFR 164.502(b), 164.514(d) — Minimum necessary.</li>
+    <li>45 CFR 164.514(a)–(c) — De-identification (Safe Harbor &amp; Expert Determination).</li>
+    <li>45 CFR 164.306(d) — Required vs Addressable specifications.</li>
+    <li>HHS — Guidance to Render Unsecured PHI Unusable; NIST SP 800-52 / 800-111.</li>
+  </ul>
+  <h4>Tooling</h4>
+  <ul class="tight">
+    <li>Playwright for Python — auto-waiting, web-first assertions, <code>expect_response</code>.</li>
+    <li>Microsoft Presidio — Analyzer/Anonymizer; spaCy <code>en_core_web_sm</code>.</li>
+    <li>Odoo web client (OWL) — <code>account.move</code> views; <code>/web/dataset/call_kw</code> JSON-RPC.</li>
+    <li>WeasyPrint — CSS Paged Media rendering of this document; Pygments — code highlighting.</li>
+  </ul>
+  <hr>
+  <p class="footnote">Prepared by Yashas Rattehalli · Senior AI Automation Engineer · Version {{ version }} · {{ date }}.
+  This document and the accompanying software are confidential and provided for evaluation.</p>
+</section>
+
+</body>
+</html>

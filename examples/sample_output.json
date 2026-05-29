@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "tool": "odoo-erp-extraction",
+    "tool_version": "1.0.0",
+    "extracted_at": "2026-05-29T02:14:46Z",
+    "source": "json-rpc:account.move/web_read",
+    "instance_url": "https://yr-solutions-srl.odoo.com",
+    "url_scheme": "modern",
+    "deidentified": false,
+    "integrity_sha256": "dc149831b8a07a77b400fc28e7f19c7e583759cc04214c5df299a863b8c0c886"
+  },
+  "invoice": {
+    "invoice_number": "INV/2026/00001",
+    "customer": "Deco Addict",
+    "invoice_date": "2026-05-20",
+    "state": "posted",
+    "currency": "EUR",
+    "amount_untaxed": 690.0,
+    "amount_tax": 122.82,
+    "amount_total": 812.82,
+    "source": "json-rpc:account.move/web_read"
+  },
+  "lines": [
+    {
+      "line_index": 0,
+      "product": "Office Chair",
+      "description": "Office Chair, ergonomic mesh",
+      "quantity": 2.0,
+      "unit_price": 120.5,
+      "taxes": [
+        "19%"
+      ],
+      "subtotal": 241.0,
+      "total": 286.79,
+      "currency": "EUR",
+      "source": "json-rpc",
+      "tax_amount": 45.79
+    },
+    {
+      "line_index": 1,
+      "product": "Standing Desk",
+      "description": "Standing Desk, electric height-adjustable",
+      "quantity": 1.0,
+      "unit_price": 380.0,
+      "taxes": [
+        "19%"
+      ],
+      "subtotal": 380.0,
+      "total": 452.2,
+      "currency": "EUR",
+      "source": "json-rpc",
+      "tax_amount": 72.2
+    },
+    {
+      "line_index": 2,
+      "product": "A5 Notebook",
+      "description": "A5 Notebook, dotted (pack)",
+      "quantity": 10.0,
+      "unit_price": 6.9,
+      "taxes": [
+        "7%"
+      ],
+      "subtotal": 69.0,
+      "total": 73.83,
+      "currency": "EUR",
+      "source": "json-rpc",
+      "tax_amount": 4.83
+    }
+  ],
+  "checks": {
+    "line_count": 3,
+    "line_tax_sum": 122.82,
+    "line_total_sum": 812.82,
+    "line_tax_sum_equals_header": true,
+    "line_total_sum_equals_amount_total": true
+  }
+}
