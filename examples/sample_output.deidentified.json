@@ -2,12 +2,12 @@
   "metadata": {
     "tool": "odoo-erp-extraction",
     "tool_version": "1.0.0",
-    "extracted_at": "2026-05-29T02:17:39Z",
+    "extracted_at": "2026-05-29T10:53:19Z",
     "source": "json-rpc:account.move/web_read",
     "instance_url": "https://yr-solutions-srl.odoo.com",
     "url_scheme": "modern",
     "deidentified": true,
-    "integrity_sha256": "dc149831b8a07a77b400fc28e7f19c7e583759cc04214c5df299a863b8c0c886"
+    "integrity_sha256": "1149a47a2ac7001124b29532fbf2348dea88b9e9f86ab8b5d290700af3768c70"
   },
   "invoice": {
     "invoice_number": "INV-117e32dfdc3f",

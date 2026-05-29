@@ -45,3 +45,18 @@ def test_deidentify_is_deterministic_and_nondestructive():
 def test_different_salt_changes_surrogate():
     src = _result()
     assert deidentify(src, salt="k1").invoice.customer != deidentify(src, salt="k2").invoice.customer
+
+
+def test_deidentify_recomputes_integrity_hash():
+    """The de-identified extract must verify against its OWN contents: the
+    fingerprint is recomputed after free-text redaction, not carried over."""
+    from odoo_extractor.integrity import lines_fingerprint
+
+    src = _result()
+    src.metadata.integrity_sha256 = lines_fingerprint(src.lines)  # pre-de-id fingerprint
+    out = deidentify(src, salt="k")
+
+    # Stored hash matches a fresh recompute over the de-identified line set.
+    assert out.metadata.integrity_sha256 == lines_fingerprint(out.lines)
+    # And it changed, because a free-text description was redacted.
+    assert out.metadata.integrity_sha256 != src.metadata.integrity_sha256

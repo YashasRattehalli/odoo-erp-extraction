@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 
+from .integrity import lines_fingerprint
 from .models import ExtractionResult
 from .sanitization import PhiRedactor
 
@@ -54,5 +55,10 @@ def deidentify(result: ExtractionResult, *, salt: str, redactor: PhiRedactor | N
         if line.description:
             line.description = scrub(line.description)
 
+    # The Safe Harbor pass mutates the line set (free-text redaction), so the
+    # integrity fingerprint MUST be recomputed — the de-identified extract has
+    # to verify against its OWN contents (45 CFR 164.312(c)). Carrying over the
+    # pre-de-id hash would make the advertised integrity check fail on this file.
     data.metadata.deidentified = True
+    data.metadata.integrity_sha256 = lines_fingerprint(data.lines)
     return data

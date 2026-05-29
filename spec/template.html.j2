@@ -371,6 +371,10 @@
     server's header <code>tax_totals</code>. These are two independent server computations; their agreement is
     strong evidence of a faithful extraction.</li>
   </ul>
+  <div class="callout"><span class="label">Self-verifying after de-identification</span>
+  The fingerprint always reflects the lines in the document at hand. When the Safe Harbor pass runs and redacts
+  free-text, the fingerprint is <strong>recomputed over the de-identified line set</strong> — so both the original
+  and the de-identified extract verify against their own contents, never a stale value.</div>
   <p>On the verified run, both checks returned <span class="badge ok">true</span>:
   <code>Σ line tax = 122.82 = amount_tax</code> and <code>Σ line total = 812.82 = amount_total</code>.</p>
 
